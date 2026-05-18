@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard de Ventas — PySpark + Flask</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    body { background-color: #f0f2f5; }
+    .navbar { background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%); }
+    .card-stat { border: none; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    .card-stat .icon-wrap { width: 52px; height: 52px; border-radius: 10px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; }
+    .card-chart { border: none; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    .card-chart .card-header { background: #fff; border-bottom: 1px solid #f0f0f0; border-radius: 12px 12px 0 0 !important; padding: 1rem 1.25rem 0.75rem; }
+    .table thead { background-color: #16213e; color: #fff; }
+    .table tbody tr:hover { background-color: #e8f0fe; }
+    .badge-rank { width: 26px; height: 26px; border-radius: 50%; display:inline-flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:700; }
+    .spinner-overlay { display:none; position:fixed; inset:0; background:rgba(255,255,255,.6); z-index:9999; align-items:center; justify-content:center; }
+    .spinner-overlay.active { display:flex; }
+    .tab-content { padding-top: 1.5rem; }
+    .section-title { font-size: 0.7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #6c757d; margin-bottom: .75rem; }
+  </style>
+</head>
+<body>
+
+<div class="spinner-overlay" id="spinnerOverlay">
+  <div class="text-center">
+    <div class="spinner-border text-primary" style="width:3rem;height:3rem;" role="status"></div>
+    <p class="mt-3 fw-semibold text-secondary">Procesando con Spark…</p>
+  </div>
+</div>
+
+<nav class="navbar navbar-dark px-4 py-3 mb-4">
+  <span class="navbar-brand fw-bold fs-5">
+    <i class="bi bi-bar-chart-fill me-2"></i>Análisis de Ventas — PySpark + Flask
+  </span>
+  <span class="text-white-50 small">2 000 000 registros</span>
+</nav>
+
+<div class="container-fluid px-4">
+
+  <!-- KPIs -->
+  <p class="section-title"><i class="bi bi-speedometer2 me-1"></i>Indicadores Clave</p>
+  <div class="row g-3 mb-4" id="kpiRow">
+    <div class="col-12 text-center text-secondary py-4">
+      <div class="spinner-border spinner-border-sm me-2"></div>Cargando resumen…
+    </div>
+  </div>
+
+  <!-- Gráficas -->
+  <p class="section-title"><i class="bi bi-graph-up me-1"></i>Visualizaciones</p>
+  <div class="row g-3 mb-4">
+
+    <!-- Ventas por Ciudad -->
+    <div class="col-lg-8">
+      <div class="card card-chart h-100">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-geo-alt-fill text-primary"></i>
+          <span class="fw-bold">Ventas por Ciudad <small class="text-muted fw-normal">(Top 10)</small></span>
+        </div>
+        <div class="card-body">
+          <canvas id="chartCiudades"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Distribución por Categoría -->
+    <div class="col-lg-4">
+      <div class="card card-chart h-100">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-pie-chart-fill text-success"></i>
+          <span class="fw-bold">Distribución por Categoría</span>
+        </div>
+        <div class="card-body d-flex align-items-center justify-content-center">
+          <canvas id="chartCategorias" style="max-height:280px;"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ventas por Tienda -->
+    <div class="col-lg-6">
+      <div class="card card-chart h-100">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-shop-window text-warning"></i>
+          <span class="fw-bold">Ventas por Tienda</span>
+        </div>
+        <div class="card-body">
+          <canvas id="chartTiendas"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top 10 Productos -->
+    <div class="col-lg-6">
+      <div class="card card-chart h-100">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="bi bi-box-seam-fill text-danger"></i>
+          <span class="fw-bold">Top 10 Productos <small class="text-muted fw-normal">por ventas totales</small></span>
+        </div>
+        <div class="card-body">
+          <canvas id="chartProductos"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Tablas detalladas -->
+  <p class="section-title"><i class="bi bi-table me-1"></i>Datos Detallados</p>
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-header bg-white border-bottom-0 pt-3">
+      <ul class="nav nav-tabs card-header-tabs" id="mainTabs">
+        <li class="nav-item">
+          <a class="nav-link active" data-bs-toggle="tab" href="#tabCiudad">
+            <i class="bi bi-geo-alt me-1"></i>Por Ciudad
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-bs-toggle="tab" href="#tabCategoria">
+            <i class="bi bi-tag me-1"></i>Por Categoría
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-bs-toggle="tab" href="#tabTienda">
+            <i class="bi bi-shop me-1"></i>Por Tienda
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-bs-toggle="tab" href="#tabProducto">
+            <i class="bi bi-box-seam me-1"></i>Top Productos
+          </a>
+        </li>
+      </ul>
+    </div>
+    <div class="card-body">
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="tabCiudad">
+          <div id="tablaCiudad"><div class="text-center text-secondary py-4"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div></div>
+        </div>
+        <div class="tab-pane fade" id="tabCategoria">
+          <div id="tablaCategoria"><div class="text-center text-secondary py-4"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div></div>
+        </div>
+        <div class="tab-pane fade" id="tabTienda">
+          <div id="tablaTienda"><div class="text-center text-secondary py-4"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div></div>
+        </div>
+        <div class="tab-pane fade" id="tabProducto">
+          <div id="tablaProducto"><div class="text-center text-secondary py-4"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-center text-muted small mt-4 mb-3">
+    Procesado con <strong>Apache Spark (local[*])</strong> · Flask · Bootstrap 5 · Chart.js
+  </p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+const fmt    = n => new Intl.NumberFormat("es-CO", {style:"currency", currency:"COP", maximumFractionDigits:0}).format(n);
+const fmtNum = n => new Intl.NumberFormat("es-CO").format(n);
+const fmtM   = v => {
+  if (v >= 1e9) return (v / 1e9).toFixed(1) + " B";
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + " M";
+  if (v >= 1e3) return (v / 1e3).toFixed(0) + " K";
+  return v;
+};
+
+const PALETTE = [
+  "#4361ee","#7209b7","#f72585","#4cc9f0","#06d6a0",
+  "#ffd166","#ef476f","#118ab2","#f4a261","#2a9d8f"
+];
+
+function rankColor(i) {
+  return i === 0 ? "#ffd700" : i === 1 ? "#c0c0c0" : i === 2 ? "#cd7f32" : "#dee2e6";
+}
+
+/* ── KPIs ─────────────────────────────────────────────────────── */
+async function loadKPIs() {
+  const res = await fetch("/api/resumen");
+  const d   = await res.json();
+  document.getElementById("kpiRow").innerHTML = `
+    <div class="col-sm-6 col-lg-3">
+      <div class="card card-stat p-3 h-100">
+        <div class="d-flex align-items-center gap-3">
+          <div class="icon-wrap" style="background:#e8f5e9;color:#2e7d32;"><i class="bi bi-currency-dollar"></i></div>
+          <div>
+            <p class="text-muted small mb-0">Total Ventas</p>
+            <p class="fw-bold fs-5 mb-0">${fmt(d.gran_total)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card card-stat p-3 h-100">
+        <div class="d-flex align-items-center gap-3">
+          <div class="icon-wrap" style="background:#e3f2fd;color:#1565c0;"><i class="bi bi-receipt"></i></div>
+          <div>
+            <p class="text-muted small mb-0">Transacciones</p>
+            <p class="fw-bold fs-5 mb-0">${fmtNum(d.total_transacciones)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card card-stat p-3 h-100">
+        <div class="d-flex align-items-center gap-3">
+          <div class="icon-wrap" style="background:#fff3e0;color:#e65100;"><i class="bi bi-graph-up-arrow"></i></div>
+          <div>
+            <p class="text-muted small mb-0">Promedio por Venta</p>
+            <p class="fw-bold fs-5 mb-0">${fmt(d.promedio_general)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card card-stat p-3 h-100">
+        <div class="d-flex align-items-center gap-3">
+          <div class="icon-wrap" style="background:#f3e5f5;color:#6a1b9a;"><i class="bi bi-lightning-charge"></i></div>
+          <div>
+            <p class="text-muted small mb-0">Tiempo procesamiento</p>
+            <p class="fw-bold fs-5 mb-0">${d.tiempo_segundos}s</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ── Tablas ───────────────────────────────────────────────────── */
+function buildTable(data, labelKey) {
+  const maxVal = data[0]?.total_ventas || 1;
+  const rows = data.map((r, i) => {
+    const pct = Math.round((r.total_ventas / maxVal) * 100);
+    return `
+      <tr>
+        <td><span class="badge-rank text-dark" style="background:${rankColor(i)}">${i+1}</span></td>
+        <td class="fw-semibold">${r[labelKey]}</td>
+        <td>
+          <div class="d-flex align-items-center gap-2">
+            <div class="progress flex-grow-1" style="height:8px;">
+              <div class="progress-bar bg-primary" style="width:${pct}%"></div>
+            </div>
+            <span class="text-nowrap small">${fmt(r.total_ventas)}</span>
+          </div>
+        </td>
+        <td class="text-end">${fmtNum(r.num_transacciones)}</td>
+        <td class="text-end">${fmt(r.promedio_venta)}</td>
+      </tr>`;
+  }).join("");
+
+  return `
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>${labelKey.charAt(0).toUpperCase() + labelKey.slice(1)}</th>
+            <th>Total Ventas</th>
+            <th class="text-end">Transacciones</th>
+            <th class="text-end">Promedio</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+/* ── Gráficas ─────────────────────────────────────────────────── */
+function renderCiudadesChart(data) {
+  const top10 = data.slice(0, 10);
+  new Chart(document.getElementById("chartCiudades"), {
+    type: "bar",
+    data: {
+      labels: top10.map(r => r.ciudad),
+      datasets: [{
+        label: "Total Ventas",
+        data: top10.map(r => r.total_ventas),
+        backgroundColor: PALETTE,
+        borderRadius: 6,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } }
+      },
+      scales: {
+        y: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderCategoriasChart(data) {
+  new Chart(document.getElementById("chartCategorias"), {
+    type: "doughnut",
+    data: {
+      labels: data.map(r => r.categoria),
+      datasets: [{
+        data: data.map(r => r.total_ventas),
+        backgroundColor: PALETTE,
+        hoverOffset: 12,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: "60%",
+      plugins: {
+        legend: { position: "bottom", labels: { padding: 16, font: { size: 12 } } },
+        tooltip: { callbacks: { label: ctx => " " + ctx.label + ": " + fmt(ctx.raw) } }
+      }
+    }
+  });
+}
+
+function renderTiendasChart(data) {
+  new Chart(document.getElementById("chartTiendas"), {
+    type: "bar",
+    data: {
+      labels: data.map(r => r.tienda),
+      datasets: [{
+        label: "Total Ventas",
+        data: data.map(r => r.total_ventas),
+        backgroundColor: PALETTE,
+        borderRadius: 6,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } }
+      },
+      scales: {
+        x: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderProductosChart(data) {
+  new Chart(document.getElementById("chartProductos"), {
+    type: "bar",
+    data: {
+      labels: data.map(r => r.producto),
+      datasets: [{
+        label: "Total Ventas",
+        data: data.map(r => r.total_ventas),
+        backgroundColor: PALETTE,
+        borderRadius: 6,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } }
+      },
+      scales: {
+        y: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } },
+        x: { grid: { display: false }, ticks: { maxRotation: 35, minRotation: 35 } }
+      }
+    }
+  });
+}
+
+/* ── Carga general ────────────────────────────────────────────── */
+async function loadTabla(endpoint, containerId, labelKey, chartRenderer) {
+  const res  = await fetch(endpoint);
+  const data = await res.json();
+  document.getElementById(containerId).innerHTML = buildTable(data, labelKey);
+  if (chartRenderer) chartRenderer(data);
+}
+
+async function loadProductos() {
+  const res  = await fetch("/api/productos");
+  const data = await res.json();
+  document.getElementById("tablaProducto").innerHTML = buildTable(data, "producto");
+  renderProductosChart(data);
+}
+
+loadKPIs();
+loadTabla("/api/ciudades",   "tablaCiudad",    "ciudad",    renderCiudadesChart);
+loadTabla("/api/categorias", "tablaCategoria", "categoria", renderCategoriasChart);
+loadTabla("/api/tiendas",    "tablaTienda",    "tienda",    renderTiendasChart);
+loadProductos();
+</script>
+</body>
+</html>

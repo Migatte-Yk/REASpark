@@ -1,0 +1,14 @@
+# Ignore Claude local settings and credentials
+.claude/
+.claude/**/*
+# Common Python artifacts
+__pycache__/
+*.py[cod]
+# Environment and secrets
+.env
+.env.*
+# Large data
+ventas_2_millones.csv
+# Editor configs
+.vscode/
+.idea/
