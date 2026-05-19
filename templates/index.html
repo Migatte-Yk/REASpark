@@ -20,6 +20,10 @@
     .spinner-overlay.active { display:flex; }
     .tab-content { padding-top: 1.5rem; }
     .section-title { font-size: 0.7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #6c757d; margin-bottom: .75rem; }
+    .tabla-comparativa thead { background-color: #1a1a2e; color: #fff; }
+    .tabla-comparativa tbody tr:nth-child(1) { background-color: #fff8e1; }
+    .tabla-comparativa tbody tr:nth-child(2) { background-color: #e8f5e9; }
+    .tabla-comparativa tbody tr:nth-child(3) { background-color: #e3f2fd; }
   </style>
 </head>
 <body>
@@ -51,8 +55,6 @@
   <!-- Gráficas -->
   <p class="section-title"><i class="bi bi-graph-up me-1"></i>Visualizaciones</p>
   <div class="row g-3 mb-4">
-
-    <!-- Ventas por Ciudad -->
     <div class="col-lg-8">
       <div class="card card-chart h-100">
         <div class="card-header d-flex align-items-center gap-2">
@@ -64,8 +66,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Distribución por Categoría -->
     <div class="col-lg-4">
       <div class="card card-chart h-100">
         <div class="card-header d-flex align-items-center gap-2">
@@ -77,8 +77,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Ventas por Tienda -->
     <div class="col-lg-6">
       <div class="card card-chart h-100">
         <div class="card-header d-flex align-items-center gap-2">
@@ -90,8 +88,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Top 10 Productos -->
     <div class="col-lg-6">
       <div class="card card-chart h-100">
         <div class="card-header d-flex align-items-center gap-2">
@@ -103,7 +99,6 @@
         </div>
       </div>
     </div>
-
   </div>
 
   <!-- Tablas detalladas -->
@@ -151,8 +146,51 @@
     </div>
   </div>
 
-  <p class="text-center text-muted small mt-4 mb-3">
-    Procesado con <strong>Apache Spark (local[*])</strong> · Flask · Bootstrap 5 · Chart.js
+  <!-- Tabla comparativa de escenarios -->
+  <p class="section-title"><i class="bi bi-clock-history me-1"></i>Comparativa de Escenarios</p>
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table tabla-comparativa align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Escenario</th>
+              <th>Configuración</th>
+              <th>Nodos usados</th>
+              <th>Tiempo de ejecución</th>
+              <th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge bg-warning text-dark">Escenario 1</span></td>
+              <td><code>local[*]</code></td>
+              <td>1 (Master únicamente)</td>
+              <td><strong>18.66s</strong></td>
+              <td>Todos los cores disponibles, un solo proceso JVM</td>
+            </tr>
+            <tr>
+              <td><span class="badge bg-success">Escenario 2</span></td>
+              <td><code>local[2]</code></td>
+              <td>2 (Master + 1 Worker)</td>
+              <td><strong id="tiempoE2">— s</strong></td>
+              <td>2 cores paralelos</td>
+            </tr>
+            <tr>
+              <td><span class="badge bg-primary">Escenario 3</span></td>
+              <td><code>local[4]</code></td>
+              <td>3 (Master + 2 Workers)</td>
+              <td><strong id="tiempoE3">— s</strong></td>
+              <td>4 cores paralelos</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-center text-muted small mt-2 mb-3">
+    Procesado con <strong>Apache Spark (<span id="sparkMaster">cargando...</span>)</strong> · Flask · Bootstrap 5 · Chart.js
   </p>
 </div>
 
@@ -177,59 +215,77 @@ function rankColor(i) {
   return i === 0 ? "#ffd700" : i === 1 ? "#c0c0c0" : i === 2 ? "#cd7f32" : "#dee2e6";
 }
 
-/* ── KPIs ─────────────────────────────────────────────────────── */
 async function loadKPIs() {
-  const res = await fetch("/api/resumen");
-  const d   = await res.json();
-  document.getElementById("kpiRow").innerHTML = `
-    <div class="col-sm-6 col-lg-3">
-      <div class="card card-stat p-3 h-100">
-        <div class="d-flex align-items-center gap-3">
-          <div class="icon-wrap" style="background:#e8f5e9;color:#2e7d32;"><i class="bi bi-currency-dollar"></i></div>
-          <div>
-            <p class="text-muted small mb-0">Total Ventas</p>
-            <p class="fw-bold fs-5 mb-0">${fmt(d.gran_total)}</p>
+  try {
+    const res = await fetch("/api/resumen");
+    if (!res.ok) throw new Error(`Error ${res.status}: ${await res.text()}`);
+    const d = await res.json();
+
+    if (d.master) document.getElementById("sparkMaster").textContent = d.master;
+
+    const master = d.master || "";
+    if (master.includes("local[2]")) {
+      document.getElementById("tiempoE2").textContent = d.tiempo_segundos + "s";
+    } else if (master.includes("local[4]")) {
+      document.getElementById("tiempoE3").textContent = d.tiempo_segundos + "s";
+    }
+
+    document.getElementById("kpiRow").innerHTML = `
+      <div class="col-sm-6 col-lg-3">
+        <div class="card card-stat p-3 h-100">
+          <div class="d-flex align-items-center gap-3">
+            <div class="icon-wrap" style="background:#e8f5e9;color:#2e7d32;"><i class="bi bi-currency-dollar"></i></div>
+            <div>
+              <p class="text-muted small mb-0">Total Ventas</p>
+              <p class="fw-bold fs-5 mb-0">${fmt(d.gran_total)}</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-      <div class="card card-stat p-3 h-100">
-        <div class="d-flex align-items-center gap-3">
-          <div class="icon-wrap" style="background:#e3f2fd;color:#1565c0;"><i class="bi bi-receipt"></i></div>
-          <div>
-            <p class="text-muted small mb-0">Transacciones</p>
-            <p class="fw-bold fs-5 mb-0">${fmtNum(d.total_transacciones)}</p>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card card-stat p-3 h-100">
+          <div class="d-flex align-items-center gap-3">
+            <div class="icon-wrap" style="background:#e3f2fd;color:#1565c0;"><i class="bi bi-receipt"></i></div>
+            <div>
+              <p class="text-muted small mb-0">Transacciones</p>
+              <p class="fw-bold fs-5 mb-0">${fmtNum(d.total_transacciones)}</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-      <div class="card card-stat p-3 h-100">
-        <div class="d-flex align-items-center gap-3">
-          <div class="icon-wrap" style="background:#fff3e0;color:#e65100;"><i class="bi bi-graph-up-arrow"></i></div>
-          <div>
-            <p class="text-muted small mb-0">Promedio por Venta</p>
-            <p class="fw-bold fs-5 mb-0">${fmt(d.promedio_general)}</p>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card card-stat p-3 h-100">
+          <div class="d-flex align-items-center gap-3">
+            <div class="icon-wrap" style="background:#fff3e0;color:#e65100;"><i class="bi bi-graph-up-arrow"></i></div>
+            <div>
+              <p class="text-muted small mb-0">Promedio por Venta</p>
+              <p class="fw-bold fs-5 mb-0">${fmt(d.promedio_general)}</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-      <div class="card card-stat p-3 h-100">
-        <div class="d-flex align-items-center gap-3">
-          <div class="icon-wrap" style="background:#f3e5f5;color:#6a1b9a;"><i class="bi bi-lightning-charge"></i></div>
-          <div>
-            <p class="text-muted small mb-0">Tiempo procesamiento</p>
-            <p class="fw-bold fs-5 mb-0">${d.tiempo_segundos}s</p>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card card-stat p-3 h-100">
+          <div class="d-flex align-items-center gap-3">
+            <div class="icon-wrap" style="background:#f3e5f5;color:#6a1b9a;"><i class="bi bi-lightning-charge"></i></div>
+            <div>
+              <p class="text-muted small mb-0">Tiempo procesamiento</p>
+              <p class="fw-bold fs-5 mb-0">${d.tiempo_segundos}s</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  `;
+    `;
+  } catch (error) {
+    document.getElementById("sparkMaster").textContent = "error";
+    document.getElementById("kpiRow").innerHTML = `
+      <div class="col-12 text-center text-danger py-4">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>Error al cargar indicadores: ${error.message}
+      </div>
+    `;
+  }
 }
 
-/* ── Tablas ───────────────────────────────────────────────────── */
 function buildTable(data, labelKey) {
   const maxVal = data[0]?.total_ventas || 1;
   const rows = data.map((r, i) => {
@@ -250,7 +306,6 @@ function buildTable(data, labelKey) {
         <td class="text-end">${fmt(r.promedio_venta)}</td>
       </tr>`;
   }).join("");
-
   return `
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
@@ -268,31 +323,18 @@ function buildTable(data, labelKey) {
     </div>`;
 }
 
-/* ── Gráficas ─────────────────────────────────────────────────── */
 function renderCiudadesChart(data) {
   const top10 = data.slice(0, 10);
   new Chart(document.getElementById("chartCiudades"), {
     type: "bar",
     data: {
       labels: top10.map(r => r.ciudad),
-      datasets: [{
-        label: "Total Ventas",
-        data: top10.map(r => r.total_ventas),
-        backgroundColor: PALETTE,
-        borderRadius: 6,
-        borderSkipped: false
-      }]
+      datasets: [{ label: "Total Ventas", data: top10.map(r => r.total_ventas), backgroundColor: PALETTE, borderRadius: 6, borderSkipped: false }]
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } }
-      },
-      scales: {
-        y: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } },
-        x: { grid: { display: false } }
-      }
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } } },
+      scales: { y: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } }, x: { grid: { display: false } } }
     }
   });
 }
@@ -302,16 +344,10 @@ function renderCategoriasChart(data) {
     type: "doughnut",
     data: {
       labels: data.map(r => r.categoria),
-      datasets: [{
-        data: data.map(r => r.total_ventas),
-        backgroundColor: PALETTE,
-        hoverOffset: 12,
-        borderWidth: 2
-      }]
+      datasets: [{ data: data.map(r => r.total_ventas), backgroundColor: PALETTE, hoverOffset: 12, borderWidth: 2 }]
     },
     options: {
-      responsive: true,
-      cutout: "60%",
+      responsive: true, cutout: "60%",
       plugins: {
         legend: { position: "bottom", labels: { padding: 16, font: { size: 12 } } },
         tooltip: { callbacks: { label: ctx => " " + ctx.label + ": " + fmt(ctx.raw) } }
@@ -325,25 +361,12 @@ function renderTiendasChart(data) {
     type: "bar",
     data: {
       labels: data.map(r => r.tienda),
-      datasets: [{
-        label: "Total Ventas",
-        data: data.map(r => r.total_ventas),
-        backgroundColor: PALETTE,
-        borderRadius: 6,
-        borderSkipped: false
-      }]
+      datasets: [{ label: "Total Ventas", data: data.map(r => r.total_ventas), backgroundColor: PALETTE, borderRadius: 6, borderSkipped: false }]
     },
     options: {
-      indexAxis: "y",
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } }
-      },
-      scales: {
-        x: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } },
-        y: { grid: { display: false } }
-      }
+      indexAxis: "y", responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } } },
+      scales: { x: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } }, y: { grid: { display: false } } }
     }
   });
 }
@@ -353,38 +376,25 @@ function renderProductosChart(data) {
     type: "bar",
     data: {
       labels: data.map(r => r.producto),
-      datasets: [{
-        label: "Total Ventas",
-        data: data.map(r => r.total_ventas),
-        backgroundColor: PALETTE,
-        borderRadius: 6,
-        borderSkipped: false
-      }]
+      datasets: [{ label: "Total Ventas", data: data.map(r => r.total_ventas), backgroundColor: PALETTE, borderRadius: 6, borderSkipped: false }]
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } }
-      },
-      scales: {
-        y: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } },
-        x: { grid: { display: false }, ticks: { maxRotation: 35, minRotation: 35 } }
-      }
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => " " + fmt(ctx.raw) } } },
+      scales: { y: { ticks: { callback: fmtM }, grid: { color: "#f0f0f0" } }, x: { grid: { display: false }, ticks: { maxRotation: 35, minRotation: 35 } } }
     }
   });
 }
 
-/* ── Carga general ────────────────────────────────────────────── */
 async function loadTabla(endpoint, containerId, labelKey, chartRenderer) {
-  const res  = await fetch(endpoint);
+  const res = await fetch(endpoint);
   const data = await res.json();
   document.getElementById(containerId).innerHTML = buildTable(data, labelKey);
   if (chartRenderer) chartRenderer(data);
 }
 
 async function loadProductos() {
-  const res  = await fetch("/api/productos");
+  const res = await fetch("/api/productos");
   const data = await res.json();
   document.getElementById("tablaProducto").innerHTML = buildTable(data, "producto");
   renderProductosChart(data);

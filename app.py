@@ -1,17 +1,15 @@
 import os
 import time
 from flask import Flask, render_template, jsonify
-from spark import cargar_datos, ventas_por_ciudad, ventas_por_categoria, ventas_por_tienda, ventas_por_producto, resumen_general
+from spark import cargar_datos, ventas_por_ciudad, ventas_por_categoria, ventas_por_tienda, ventas_por_producto, resumen_general, get_spark_session
 
 app = Flask(__name__)
 
-# Ruta al CSV — ajusta si tu archivo está en otra ubicación
 RUTA_CSV = os.path.join(os.path.dirname(__file__), "ventas_2_millones.csv")
 
-# Cargamos el dataframe una sola vez al arrancar
 print("Cargando datos, esto puede tardar unos segundos...")
 _df = cargar_datos(RUTA_CSV)
-_df.cache()  # Guardamos en memoria para que las consultas sean más rápidas
+_df.cache()
 print("Datos cargados correctamente.")
 
 
@@ -25,6 +23,7 @@ def api_resumen():
     inicio = time.time()
     data = resumen_general(_df)
     data["tiempo_segundos"] = round(time.time() - inicio, 2)
+    data["master"] = get_spark_session().sparkContext.master
     return jsonify(data)
 
 
@@ -49,5 +48,4 @@ def api_productos():
 
 
 if __name__ == "__main__":
-    # use_reloader=False es obligatorio para evitar que Spark arranque dos veces
     app.run(debug=True, use_reloader=False, host="0.0.0.0", port=5000)

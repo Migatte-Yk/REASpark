@@ -17,6 +17,10 @@
     .spinner-overlay { display:none; position:fixed; inset:0; background:rgba(255,255,255,.6); z-index:9999; align-items:center; justify-content:center; }
     .spinner-overlay.active { display:flex; }
     .tab-content { padding-top: 1.5rem; }
+    .tabla-comparativa thead { background-color: #1a1a2e; color: #fff; }
+    .tabla-comparativa tbody tr:nth-child(1) { background-color: #fff8e1; }
+    .tabla-comparativa tbody tr:nth-child(2) { background-color: #e8f5e9; }
+    .tabla-comparativa tbody tr:nth-child(3) { background-color: #e3f2fd; }
   </style>
 </head>
 <body>
@@ -45,7 +49,7 @@
   </div>
 
   <!-- Tabs -->
-  <div class="card border-0 shadow-sm rounded-3">
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-header bg-white border-bottom-0 pt-3">
       <ul class="nav nav-tabs card-header-tabs" id="mainTabs">
         <li class="nav-item">
@@ -80,8 +84,53 @@
     </div>
   </div>
 
-  <p class="text-center text-muted small mt-4 mb-3">
-    Procesado con <strong>Apache Spark (local[*])</strong> · Flask · Bootstrap 5
+  <!-- Tabla comparativa de escenarios -->
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-header bg-white pt-3 pb-2">
+      <h6 class="fw-bold mb-0"><i class="bi bi-speedometer2 me-2 text-primary"></i>Comparativa de Escenarios</h6>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table tabla-comparativa align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Escenario</th>
+              <th>Configuración</th>
+              <th>Nodos usados</th>
+              <th>Tiempo de ejecución</th>
+              <th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge bg-warning text-dark">Escenario 1</span></td>
+              <td><code>local[*]</code></td>
+              <td>1 (Master únicamente)</td>
+              <td><strong>18.66s</strong></td>
+              <td>Todos los cores disponibles, un solo proceso JVM</td>
+            </tr>
+            <tr>
+              <td><span class="badge bg-success">Escenario 2</span></td>
+              <td><code>local[2]</code></td>
+              <td>2 (Master + 1 Worker)</td>
+              <td><strong id="tiempoE2">— s</strong></td>
+              <td>2 cores paralelos</td>
+            </tr>
+            <tr>
+              <td><span class="badge bg-primary">Escenario 3</span></td>
+              <td><code>local[4]</code></td>
+              <td>3 (Master + 2 Workers)</td>
+              <td><strong id="tiempoE3">— s</strong></td>
+              <td>4 cores paralelos</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-center text-muted small mt-2 mb-3">
+    Procesado con <strong>Apache Spark (<span id="sparkMaster">local[*]</span>)</strong> · Flask · Bootstrap 5
   </p>
 </div>
 
@@ -97,6 +146,18 @@ function rankColor(i) {
 async function loadKPIs() {
   const res = await fetch("/api/resumen");
   const d = await res.json();
+
+  // Actualiza footer con master actual
+  if (d.master) document.getElementById("sparkMaster").textContent = d.master;
+
+  // Actualiza tiempo del escenario actual en la tabla
+  const master = d.master || "";
+  if (master.includes("local[2]")) {
+    document.getElementById("tiempoE2").textContent = d.tiempo_segundos + "s";
+  } else if (master.includes("local[4]")) {
+    document.getElementById("tiempoE3").textContent = d.tiempo_segundos + "s";
+  }
+
   document.getElementById("kpiRow").innerHTML = `
     <div class="col-sm-6 col-lg-3">
       <div class="card card-stat p-3 h-100">
@@ -191,7 +252,6 @@ async function loadTabla(endpoint, containerId, labelKey) {
   document.getElementById(containerId).innerHTML = buildTable(data, labelKey);
 }
 
-// Cargamos todo al inicio
 loadKPIs();
 loadTabla("/api/ciudades",   "tablaCiudad",    "ciudad");
 loadTabla("/api/categorias", "tablaCategoria", "categoria");
